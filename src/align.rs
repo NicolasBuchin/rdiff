@@ -10,8 +10,8 @@ enum Direction {
 }
 
 pub fn needleman_wunsch_word_align(s1: &str, s2: &str) -> (String, String, DiffStats) {
-    let words1: Vec<&str> = s1.split_whitespace().collect();
-    let words2: Vec<&str> = s2.split_whitespace().collect();
+    let words1: Vec<&str> = s1.split(' ').collect();
+    let words2: Vec<&str> = s2.split(' ').collect();
 
     let m = words1.len();
     let n = words2.len();
