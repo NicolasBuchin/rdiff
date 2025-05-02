@@ -1,5 +1,7 @@
 use colored::*;
 
+use crate::DiffStats;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Direction {
     Diag,
@@ -7,7 +9,7 @@ enum Direction {
     Left,
 }
 
-pub fn needleman_wunsch_word_align(s1: &str, s2: &str) -> (String, String) {
+pub fn needleman_wunsch_word_align(s1: &str, s2: &str) -> (String, String, DiffStats) {
     let words1: Vec<&str> = s1.split_whitespace().collect();
     let words2: Vec<&str> = s2.split_whitespace().collect();
 
@@ -85,6 +87,7 @@ pub fn needleman_wunsch_word_align(s1: &str, s2: &str) -> (String, String) {
 
     let mut out1 = Vec::new();
     let mut out2 = Vec::new();
+    let mut stats = DiffStats::default();
 
     for (w1, w2) in aligned1.into_iter().zip(aligned2.into_iter()) {
         match (w1, w2) {
@@ -95,21 +98,24 @@ pub fn needleman_wunsch_word_align(s1: &str, s2: &str) -> (String, String) {
             (Some(a), Some(b)) => {
                 out1.push(a.yellow().to_string());
                 out2.push(b.yellow().to_string());
+                stats.substitutions += 1;
             }
             (Some(a), None) => {
                 out1.push(a.red().to_string());
+                stats.deletions += 1;
             }
             (None, Some(b)) => {
                 out2.push(b.green().to_string());
+                stats.insertions += 1;
             }
             _ => {}
         }
     }
 
-    (out1.join(" "), out2.join(" "))
+    (out1.join(" "), out2.join(" "), stats)
 }
 
-pub fn needleman_wunsch_char_align(s1: &str, s2: &str) -> (String, String) {
+pub fn needleman_wunsch_char_align(s1: &str, s2: &str) -> (String, String, DiffStats) {
     let chars1: Vec<char> = s1.chars().collect();
     let chars2: Vec<char> = s2.chars().collect();
 
@@ -140,6 +146,7 @@ pub fn needleman_wunsch_char_align(s1: &str, s2: &str) -> (String, String) {
                 } else {
                     mismatch_penalty
                 };
+
             let up = score[i - 1][j] + gap_penalty;
             let left = score[i][j - 1] + gap_penalty;
 
@@ -187,9 +194,10 @@ pub fn needleman_wunsch_char_align(s1: &str, s2: &str) -> (String, String) {
 
     let mut out1 = String::new();
     let mut out2 = String::new();
+    let mut stats = DiffStats::default();
 
-    for (c1, c2) in aligned1.into_iter().zip(aligned2.into_iter()) {
-        match (c1, c2) {
+    for (x1, x2) in aligned1.into_iter().zip(aligned2.into_iter()) {
+        match (x1, x2) {
             (Some(a), Some(b)) if a == b => {
                 out1.push_str(&a.to_string().white().to_string());
                 out2.push_str(&b.to_string().white().to_string());
@@ -197,16 +205,21 @@ pub fn needleman_wunsch_char_align(s1: &str, s2: &str) -> (String, String) {
             (Some(a), Some(b)) => {
                 out1.push_str(&a.to_string().yellow().to_string());
                 out2.push_str(&b.to_string().yellow().to_string());
+                stats.substitutions += 1;
             }
             (Some(a), None) => {
                 out1.push_str(&a.to_string().red().to_string());
+                // out2.push(' ');
+                stats.deletions += 1;
             }
             (None, Some(b)) => {
+                // out1.push(' ');
                 out2.push_str(&b.to_string().green().to_string());
+                stats.insertions += 1;
             }
             _ => {}
         }
     }
 
-    (out1, out2)
+    (out1, out2, stats)
 }

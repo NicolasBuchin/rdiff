@@ -12,6 +12,17 @@ struct Args {
 
     #[arg(short = 'c', long = "char")]
     by_char: bool,
+
+    #[arg(long = "stats")]
+    stats: bool,
+}
+
+#[derive(Default)]
+struct DiffStats {
+    insertions: usize,
+    deletions: usize,
+    substitutions: usize,
+    changed_lines: usize,
 }
 
 fn main() -> io::Result<()> {
@@ -36,13 +47,32 @@ fn main() -> io::Result<()> {
         })
         .collect();
 
-    for (i, s1, s2) in diffs.iter() {
-        let (a1, a2) = if args.by_char {
-            needleman_wunsch_char_align(s1, s2)
+    let mut total_stats = DiffStats::default();
+
+    for (i, l1, l2) in diffs.iter() {
+        let (a1, a2, stats) = if args.by_char {
+            needleman_wunsch_char_align(l1, l2)
         } else {
-            needleman_wunsch_word_align(s1, s2)
+            needleman_wunsch_word_align(l1, l2)
         };
         println!("diff at {}:\n<{}\n>{}", i, a1, a2);
+
+        if args.stats {
+            total_stats.changed_lines += 1;
+            total_stats.insertions += stats.insertions;
+            total_stats.deletions += stats.deletions;
+            total_stats.substitutions += stats.substitutions;
+        }
+    }
+
+    if args.stats {
+        println!(
+            "\nSummary: {} lines changed, {} insertions, {} deletions, {} substitutions",
+            total_stats.changed_lines,
+            total_stats.insertions,
+            total_stats.deletions,
+            total_stats.substitutions
+        );
     }
 
     Ok(())
