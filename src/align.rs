@@ -1,6 +1,5 @@
-use colored::*;
-
 use crate::DiffStats;
+use colored::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Direction {
@@ -9,6 +8,16 @@ enum Direction {
     Left,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Cell {
+    score: i32,
+    from: Direction,
+}
+
+const MATCH_SCORE: i32 = 2;
+const MISMATCH_PENALTY: i32 = -1;
+const GAP_PENALTY: i32 = -2;
+
 pub fn needleman_wunsch_word_align(s1: &str, s2: &str) -> (String, String, DiffStats) {
     let words1: Vec<&str> = s1.split(' ').collect();
     let words2: Vec<&str> = s2.split(' ').collect();
@@ -16,101 +25,93 @@ pub fn needleman_wunsch_word_align(s1: &str, s2: &str) -> (String, String, DiffS
     let m = words1.len();
     let n = words2.len();
 
-    let match_score = 2;
-    let mismatch_penalty = -1;
-    let gap_penalty = -2;
-
-    let mut score = vec![vec![0; n + 1]; m + 1];
-    let mut backtrack = vec![vec![Direction::Diag; n + 1]; m + 1];
+    let mut matrix = vec![
+        Cell {
+            score: 0,
+            from: Direction::Diag
+        };
+        (m + 1) * (n + 1)
+    ];
+    let idx = |i: usize, j: usize| i * (n + 1) + j;
 
     for i in 1..=m {
-        score[i][0] = i as i32 * gap_penalty;
-        backtrack[i][0] = Direction::Up;
+        matrix[idx(i, 0)] = Cell {
+            score: (i as i32) * GAP_PENALTY,
+            from: Direction::Up,
+        };
     }
     for j in 1..=n {
-        score[0][j] = j as i32 * gap_penalty;
-        backtrack[0][j] = Direction::Left;
+        matrix[idx(0, j)] = Cell {
+            score: (j as i32) * GAP_PENALTY,
+            from: Direction::Left,
+        };
     }
 
     for i in 1..=m {
         for j in 1..=n {
-            let diag = score[i - 1][j - 1]
-                + if words1[i - 1] == words2[j - 1] {
-                    match_score
-                } else {
-                    mismatch_penalty
-                };
-            let up = score[i - 1][j] + gap_penalty;
-            let left = score[i][j - 1] + gap_penalty;
+            let match_or_mismatch = if words1[i - 1] == words2[j - 1] {
+                MATCH_SCORE
+            } else {
+                MISMATCH_PENALTY
+            };
+            let diag = matrix[idx(i - 1, j - 1)].score + match_or_mismatch;
+            let up = matrix[idx(i - 1, j)].score + GAP_PENALTY;
+            let left = matrix[idx(i, j - 1)].score + GAP_PENALTY;
 
-            let (best, dir) = [
-                (diag, Direction::Diag),
-                (up, Direction::Up),
-                (left, Direction::Left),
-            ]
-            .into_iter()
-            .max_by_key(|(v, _)| *v)
-            .unwrap();
+            let (best_score, best_direction) = if diag >= up && diag >= left {
+                (diag, Direction::Diag)
+            } else if up >= diag && up >= left {
+                (up, Direction::Up)
+            } else {
+                (left, Direction::Left)
+            };
 
-            score[i][j] = best;
-            backtrack[i][j] = dir;
+            matrix[idx(i, j)] = Cell {
+                score: best_score,
+                from: best_direction,
+            };
         }
     }
 
-    let mut aligned1 = Vec::new();
-    let mut aligned2 = Vec::new();
-
+    let mut out1 = Vec::with_capacity(m);
+    let mut out2 = Vec::with_capacity(n);
+    let mut stats = DiffStats::default();
     let (mut i, mut j) = (m, n);
+
     while i > 0 || j > 0 {
-        match backtrack[i][j] {
+        let cell = matrix[idx(i, j)];
+        match cell.from {
             Direction::Diag => {
-                aligned1.push(Some(words1[i - 1]));
-                aligned2.push(Some(words2[j - 1]));
+                let w1 = words1[i - 1];
+                let w2 = words2[j - 1];
+                if w1 == w2 {
+                    out1.push(w1.white().to_string());
+                    out2.push(w2.white().to_string());
+                } else {
+                    out1.push(w1.yellow().to_string());
+                    out2.push(w2.yellow().to_string());
+                    stats.substitutions += 1;
+                }
                 i -= 1;
                 j -= 1;
             }
             Direction::Up => {
-                aligned1.push(Some(words1[i - 1]));
-                aligned2.push(None);
+                let w1 = words1[i - 1];
+                out1.push(w1.red().to_string());
+                stats.deletions += 1;
                 i -= 1;
             }
             Direction::Left => {
-                aligned1.push(None);
-                aligned2.push(Some(words2[j - 1]));
+                let w2 = words2[j - 1];
+                out2.push(w2.green().to_string());
+                stats.insertions += 1;
                 j -= 1;
             }
         }
     }
 
-    aligned1.reverse();
-    aligned2.reverse();
-
-    let mut out1 = Vec::new();
-    let mut out2 = Vec::new();
-    let mut stats = DiffStats::default();
-
-    for (w1, w2) in aligned1.into_iter().zip(aligned2.into_iter()) {
-        match (w1, w2) {
-            (Some(a), Some(b)) if a == b => {
-                out1.push(a.white().to_string());
-                out2.push(b.white().to_string());
-            }
-            (Some(a), Some(b)) => {
-                out1.push(a.yellow().to_string());
-                out2.push(b.yellow().to_string());
-                stats.substitutions += 1;
-            }
-            (Some(a), None) => {
-                out1.push(a.red().to_string());
-                stats.deletions += 1;
-            }
-            (None, Some(b)) => {
-                out2.push(b.green().to_string());
-                stats.insertions += 1;
-            }
-            _ => {}
-        }
-    }
+    out1.reverse();
+    out2.reverse();
 
     (out1.join(" "), out2.join(" "), stats)
 }
@@ -122,104 +123,93 @@ pub fn needleman_wunsch_char_align(s1: &str, s2: &str) -> (String, String, DiffS
     let m = chars1.len();
     let n = chars2.len();
 
-    let match_score = 2;
-    let mismatch_penalty = -1;
-    let gap_penalty = -2;
-
-    let mut score = vec![vec![0; n + 1]; m + 1];
-    let mut backtrack = vec![vec![Direction::Diag; n + 1]; m + 1];
+    let mut matrix = vec![
+        Cell {
+            score: 0,
+            from: Direction::Diag
+        };
+        (m + 1) * (n + 1)
+    ];
+    let idx = |i: usize, j: usize| i * (n + 1) + j;
 
     for i in 1..=m {
-        score[i][0] = i as i32 * gap_penalty;
-        backtrack[i][0] = Direction::Up;
+        matrix[idx(i, 0)] = Cell {
+            score: (i as i32) * GAP_PENALTY,
+            from: Direction::Up,
+        };
     }
     for j in 1..=n {
-        score[0][j] = j as i32 * gap_penalty;
-        backtrack[0][j] = Direction::Left;
+        matrix[idx(0, j)] = Cell {
+            score: (j as i32) * GAP_PENALTY,
+            from: Direction::Left,
+        };
     }
 
     for i in 1..=m {
         for j in 1..=n {
-            let diag = score[i - 1][j - 1]
-                + if chars1[i - 1] == chars2[j - 1] {
-                    match_score
-                } else {
-                    mismatch_penalty
-                };
+            let match_or_mismatch = if chars1[i - 1] == chars2[j - 1] {
+                MATCH_SCORE
+            } else {
+                MISMATCH_PENALTY
+            };
+            let diag = matrix[idx(i - 1, j - 1)].score + match_or_mismatch;
+            let up = matrix[idx(i - 1, j)].score + GAP_PENALTY;
+            let left = matrix[idx(i, j - 1)].score + GAP_PENALTY;
 
-            let up = score[i - 1][j] + gap_penalty;
-            let left = score[i][j - 1] + gap_penalty;
+            let (best_score, best_direction) = if diag >= up && diag >= left {
+                (diag, Direction::Diag)
+            } else if up >= diag && up >= left {
+                (up, Direction::Up)
+            } else {
+                (left, Direction::Left)
+            };
 
-            let (best, dir) = [
-                (diag, Direction::Diag),
-                (up, Direction::Up),
-                (left, Direction::Left),
-            ]
-            .into_iter()
-            .max_by_key(|(v, _)| *v)
-            .unwrap();
-
-            score[i][j] = best;
-            backtrack[i][j] = dir;
+            matrix[idx(i, j)] = Cell {
+                score: best_score,
+                from: best_direction,
+            };
         }
     }
 
-    let mut aligned1 = Vec::new();
-    let mut aligned2 = Vec::new();
+    let mut out1 = Vec::with_capacity(m);
+    let mut out2 = Vec::with_capacity(n);
+    let mut stats = DiffStats::default();
     let (mut i, mut j) = (m, n);
 
     while i > 0 || j > 0 {
-        match backtrack[i][j] {
+        let cell = matrix[idx(i, j)];
+        match cell.from {
             Direction::Diag => {
-                aligned1.push(Some(chars1[i - 1]));
-                aligned2.push(Some(chars2[j - 1]));
+                let c1 = chars1[i - 1];
+                let c2 = chars2[j - 1];
+                if c1 == c2 {
+                    out1.push(c1.to_string().white().to_string());
+                    out2.push(c2.to_string().white().to_string());
+                } else {
+                    out1.push(c1.to_string().yellow().to_string());
+                    out2.push(c2.to_string().yellow().to_string());
+                    stats.substitutions += 1;
+                }
                 i -= 1;
                 j -= 1;
             }
             Direction::Up => {
-                aligned1.push(Some(chars1[i - 1]));
-                aligned2.push(None);
+                let c1 = chars1[i - 1];
+                out1.push(c1.to_string().red().to_string());
+                stats.deletions += 1;
                 i -= 1;
             }
             Direction::Left => {
-                aligned1.push(None);
-                aligned2.push(Some(chars2[j - 1]));
+                let c2 = chars2[j - 1];
+                out2.push(c2.to_string().green().to_string());
+                stats.insertions += 1;
                 j -= 1;
             }
         }
     }
 
-    aligned1.reverse();
-    aligned2.reverse();
+    out1.reverse();
+    out2.reverse();
 
-    let mut out1 = String::new();
-    let mut out2 = String::new();
-    let mut stats = DiffStats::default();
-
-    for (x1, x2) in aligned1.into_iter().zip(aligned2.into_iter()) {
-        match (x1, x2) {
-            (Some(a), Some(b)) if a == b => {
-                out1.push_str(&a.to_string().white().to_string());
-                out2.push_str(&b.to_string().white().to_string());
-            }
-            (Some(a), Some(b)) => {
-                out1.push_str(&a.to_string().yellow().to_string());
-                out2.push_str(&b.to_string().yellow().to_string());
-                stats.substitutions += 1;
-            }
-            (Some(a), None) => {
-                out1.push_str(&a.to_string().red().to_string());
-                // out2.push(' ');
-                stats.deletions += 1;
-            }
-            (None, Some(b)) => {
-                // out1.push(' ');
-                out2.push_str(&b.to_string().green().to_string());
-                stats.insertions += 1;
-            }
-            _ => {}
-        }
-    }
-
-    (out1, out2, stats)
+    (out1.join(""), out2.join(""), stats)
 }
