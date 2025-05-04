@@ -1,6 +1,5 @@
 use align::{needleman_wunsch_char_align, needleman_wunsch_word_align};
 use clap::Parser;
-use rayon::prelude::*;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 mod align;
@@ -31,30 +30,21 @@ fn main() -> io::Result<()> {
     let f1 = BufReader::new(File::open(&args.file1)?);
     let f2 = BufReader::new(File::open(&args.file2)?);
 
-    let lines1: Vec<_> = f1.lines().collect::<Result<_, _>>()?;
-    let lines2: Vec<_> = f2.lines().collect::<Result<_, _>>()?;
-
-    let diffs: Vec<_> = lines1
-        .par_iter()
-        .zip(&lines2)
-        .enumerate()
-        .filter_map(|(i, (s1, s2))| {
-            if s1 != s2 {
-                Some((i, s1.clone(), s2.clone()))
-            } else {
-                None
-            }
-        })
-        .collect();
-
     let mut total_stats = DiffStats::default();
 
-    for (i, l1, l2) in diffs.iter() {
+    for (i, (line1, line2)) in f1.lines().zip(f2.lines()).enumerate() {
+        let l1 = line1?;
+        let l2 = line2?;
+
+        if l1 == l2 {
+            continue;
+        }
         let (a1, a2, stats) = if args.by_char {
-            needleman_wunsch_char_align(l1, l2)
+            needleman_wunsch_char_align(&l1, &l2)
         } else {
-            needleman_wunsch_word_align(l1, l2)
+            needleman_wunsch_word_align(&l1, &l2)
         };
+
         println!("diff at {}:\n<{}\n>{}", i, a1, a2);
 
         if args.stats {
