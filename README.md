@@ -1,6 +1,7 @@
 # rdiff
 
-A fast, parallel diff tool written in Rust that highlights differences **word-by-word** or **character-by-character** using a Smith-Waterman-style alignment.
+A diff tool written in Rust that highlights differences **word-by-word** or **character-by-character** using a Smith-Waterman-style alignment.
+It supports colored output, tag annotations, and custom tracking for SAM and PAF files.
 
 ## Installation
 
@@ -18,9 +19,16 @@ This will build the binary at `target/release/rdiff`.
 rdiff <file1> <file2>
 ```
 
+
 ### Options
 
-* `-c`, `--char` — Compare lines character-by-character (default is word-by-word)
+| Flag                           | Description                                                                                     |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `-c`, `--char`                 | Compare line differences **character-by-character** (default: word-based)                       |
+| `-t`, `--tags`                 | Annotate insertions, deletions, and substitutions using tag wrappers                            |
+| `--tags-type <SAM \| PAF>`     | Annotate with tags and track field-level substitution stats for SAM or PAF                      |
+| `--stats`                      | Print a summary of the number of insertions, deletions, substitutions, and changed lines        |
+| `-h`, `--help`                 | Show help                                                                                       |
 
 Colors:
 
